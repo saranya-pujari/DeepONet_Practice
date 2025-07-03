@@ -2,10 +2,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
-from tensorflow import keras
-import DeepONet_data as data
-import DeepONet_model as model
-from DeepONet_model import BiasLayer
+import DeepONet_v2_data as data
+import DeepONet_v2_model as model
 
 # Load trained model
 N_train = 2000

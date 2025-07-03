@@ -1,13 +1,3 @@
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF
-from tqdm import tqdm
-from scipy.integrate import solve_ivp
-import numpy as np
-import matplotlib.pyplot as plt
-from collections import defaultdict
-
-import DeepONet_data as data
-
 import tensorflow as tf
 from tensorflow import keras
 tf.random.set_seed(42)
@@ -26,7 +16,7 @@ def create_model(mean, var, verbose=False):
     model: the DeepONet model
     """
     # Branch net
-    branch_input = tf.keras.Input(shape=(len(mean['forcing']),), name="forcing")
+    branch_input = keras.Input(shape=(len(mean['forcing']),), name="forcing")
     branch = tf.keras.layers.Normalization(mean=mean['forcing'], variance=var['forcing'])(branch_input)
     for _ in range(3):
         branch = tf.keras.layers.Dense(50, activation="tanh")(branch)

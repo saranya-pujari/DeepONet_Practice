@@ -1,160 +1,116 @@
-
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF
 from tqdm import tqdm
 from scipy.integrate import solve_ivp
 import numpy as np
-import matplotlib.pyplot as plt
-from collections import defaultdict
-import tensorflow as tf
-from tensorflow import keras
+from pde import CartesianGrid, ScalarField, PDE
 
 
-def create_samples(length_scale, sample_num):
-    """Create synthetic data for u(·)
+def create_gaussian_samples(length_scale, sample_num):
+  x = np.linspace(0, 1, 100)
+  t = np.linspace(0, 1, 100)
+  X, T = np.meshgrid(x, t, indexing='ij')
 
-    Args:
-    ----
-    length_scale: float, length scale for RNF kernel
-    sample_num: number of u(·) profiles to generate
+  u_sample = np.zeros((sample_num, 100 * 100))
 
-    Outputs:
-    --------
-    u_sample: generated u(·) profiles
-    """
+  for i in range(sample_num):
+    gp = GaussianProcessRegressor(kernel=RBF(length_scale=length_scale))
+    coords = np.stack([X.flatten(), T.flatten()], axis=1)
+    u = gp.sample_y(coords, random_state=np.random.randint(0, 10000))
+    u_sample[i, :] = u.flatten()
 
-    # Define kernel with given length scale
-    kernel = RBF(length_scale)
-
-    # Create Gaussian process regressor
-    gp = GaussianProcessRegressor(kernel=kernel)
-
-    # Collocation point locations
-    X_sample = np.linspace(0, 1, 100).reshape(-1, 1) 
-
-    # Create samples
-    u_sample = np.zeros((sample_num, 100))
-    for i in range(sample_num):
-        # sampling from the prior directly
-        n = np.random.randint(0, 10000)
-        u_sample[i, :] = gp.sample_y(X_sample, random_state=n).flatten()  
-
-    return u_sample
+  return u_sample
 
 # Linear Function
 def create_linear_samples(sample_num):
-  # Collocation point locations
-  X_sample = np.linspace(0, 1, 100).reshape(-1, 1) 
+  x = np.linspace(0, 1, 100)
+  t = np.linspace(0, 1, 100)
+  X, T = np.meshgrid(x, t, indexing='ij')
 
-  # Create samples
-  u_sample = np.zeros((sample_num, 100))
+  u_sample = np.zeros((sample_num, 100 * 100))
+
   for i in range(sample_num):
-      a = np.random.uniform(-1, 1)
-      b = np.random.uniform(-1, 1)
-      u_sample[i, :] = a*X_sample.flatten() + b
+    a = np.random.uniform(-1, 1)
+    b = np.random.uniform(-1, 1)
+    u = a * X + b * T
+    u_sample[i, :] = u.flatten()
 
   return u_sample
 
 # Sinusoidal Function
 def create_sinusoidal_samples(sample_num):
-  # Collocation point locations
-  X_sample = np.linspace(0, 1, 100).reshape(-1, 1) 
+  x = np.linspace(0, 1, 100)
+  t = np.linspace(0, 1, 100)
+  X, T = np.meshgrid(x, t, indexing='ij')
 
-  # Create samples
-  u_sample = np.zeros((sample_num, 100))
+  u_sample = np.zeros((sample_num, 100 * 100))
+
   for i in range(sample_num):
-      a = np.random.uniform(-1, 1)
-      b = np.random.uniform(-1, 1)
-      u_sample[i, :] = a*np.sin(2*np.pi*b*X_sample.flatten())
+    a = np.random.uniform(-1, 1)
+    b = np.random.uniform(-1, 1)
+    u = np.sin(2*np.pi*a*X) + np.sin(2*np.pi*b*T)
+    u_sample[i, :] = u.flatten()
 
   return u_sample
 
 # Random Walk
 def create_random_walk_samples(sample_num):
-  # Collocation point locations
-  X_sample = np.linspace(0, 1, 100).reshape(-1, 1) 
+  x = np.linspace(0, 1, 100)
+  t = np.linspace(0, 1, 100)
+  X, T = np.meshgrid(x, t, indexing='ij')
 
-  # Create samples
-  u_sample = np.zeros((sample_num, 100))
+  u_sample = np.zeros((sample_num, 100 * 100))
+
   for i in range(sample_num):
-    steps = np.random.randn(99)  # 99 steps to get 100 points
-    u = np.concatenate([[0], np.cumsum(steps)])  # start at 0
-    u_sample[i, :] = u
+    walk_x = np.cumsum(np.random.randn(99), axis=0)
+    walk_t = np.cumsum(np.random.randn(99), axis=0)
+    u = np.outer(walk_x, walk_t)
+  u_sample[i,:] = u.flatten()
+
   return u_sample
 
-# Modified generate_dataset function
-def generate_dataset_new(N, type, ODE_solve=False, length_scale=0.4):
-  # Create random fields
-    
-  random_field = []
-  if type == 'linear':
-      random_field = create_linear_samples(N)
-  elif type == 'sinusoidal':
-      random_field = create_sinusoidal_samples(N)
-  elif type == 'random_walk':
-      random_field = create_random_walk_samples(N)
-  else:
-      create_samples(N, length_scale)
-# Compile dataset
-  X = np.zeros((N*100, 100+2))
-  y = np.zeros((N*100, 1))
-
-  for i in tqdm(range(N)):
-      u = np.tile(random_field[i, :], (100, 1))
-      t = np.linspace(0, 1, 100).reshape(-1, 1)
-
-      # u(·) evaluated at t
-      u_t = np.diag(u).reshape(-1, 1)
-
-      # Update overall matrix
-      X[i*100:(i+1)*100, :] = np.concatenate((t, u, u_t), axis=1)
-
-      # Solve ODE
-      if ODE_solve:
-          sol = solve_ivp(lambda var_t, var_s: np.interp(var_t, t.flatten(), random_field[i, :]), 
-                          t_span=[0, 1], y0=[0], t_eval=t.flatten(), method='RK45')
-          y[i*100:(i+1)*100, :] = sol.y[0].reshape(-1, 1)
-
-  return X, y
-    
-
-
-def generate_dataset(N, length_scale, ODE_solve=False):
-    """Generate dataset for Physics-informed DeepONet training.
-
-    Args:
-    ----
-    N: int, number of u(·) profiles
-    length_scale: float, length scale for RNF kernel
-    ODE_solve: boolean, indicate whether to compute the corresponding s(·)
-
-    Outputs:
-    --------
-    X: the dataset for t, u(·) profiles, and u(t)
-    y: the dataset for the corresponding ODE solution s(·)
-    """
-
+# Generate the dataset
+def generate_dataset_new(N, type = 'gaussian', PDE_solve=False, length_scale=0.4):
     # Create random fields
-    random_field = create_samples(length_scale, N)
+    if type == 'gaussian':
+      random_field = create_gaussian_samples
+    elif type == 'linear':
+      random_field = create_linear_samples(N)
+    elif type == 'sinusoidal':
+      random_field = create_sinusoidal_samples(N)
+    elif type == 'random_walk':
+      random_field = create_random_walk_samples(N)
+    else:
+      raise ValueError("Unsupported sample_type.")
 
     # Compile dataset
-    X = np.zeros((N*100, 100+2))
-    y = np.zeros((N*100, 1))
+    X = np.zeros((N * 100, 100 + 2))
+    y = np.zeros((N * 100, 1))
 
     for i in tqdm(range(N)):
-        u = np.tile(random_field[i, :], (100, 1))
-        t = np.linspace(0, 1, 100).reshape(-1, 1)
+      u = np.tile(random_field[i, :], (100, 1))  # shape (100, 100)
+      t = np.linspace(0, 1, 100).reshape(-1, 1)
+      u_t = np.diag(u).reshape(-1, 1)
 
-        # u(·) evaluated at t
-        u_t = np.diag(u).reshape(-1, 1)
+      X[i * 100:(i + 1) * 100, :] = np.concatenate((t, u, u_t), axis=1)
 
-        # Update overall matrix
-        X[i*100:(i+1)*100, :] = np.concatenate((t, u, u_t), axis=1)
+      # Solve PDE instead of ODE
+      if PDE_solve:
+          # Setup PDE grid and RHS
+          grid = CartesianGrid([[0, 1]], [100])
+          dt = 1.0 / 99
+          u_xt = u  # shape (100, 100)
 
-        # Solve ODE
-        if ODE_solve:
-            sol = solve_ivp(lambda var_t, var_s: np.interp(var_t, t.flatten(), random_field[i, :]), 
-                            t_span=[0, 1], y0=[0], t_eval=t.flatten(), method='RK45')
-            y[i*100:(i+1)*100, :] = sol.y[0].reshape(-1, 1)
+          def pde_rhs(state, t_val):
+              idx = int(np.clip(t_val / dt, 0, 99))
+              u_slice = u_xt[:, idx]
+              return {"s": state.laplace(bc="natural") + u_slice}
+
+          eq = PDE({"s": pde_rhs}, bc={"s": "natural"})
+          s0 = ScalarField(grid, data=0.0)
+          sol = eq.solve(s0, t_range=(0, 1), dt=dt, tracker=None)
+
+          sol_data = np.stack([sol.get_field(t=ti).data for ti in np.linspace(0, 1, 100)], axis=1)
+          y[i * 100:(i + 1) * 100, :] = sol_data.T.reshape(-1, 1)
 
     return X, y
