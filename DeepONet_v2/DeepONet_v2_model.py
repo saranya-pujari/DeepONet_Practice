@@ -3,43 +3,29 @@ from tensorflow import keras
 tf.random.set_seed(42)
 
 def create_model(mean, var, verbose=False):
-    """Definition of a DeepONet with fully connected branch and trunk layers.
-
-    Args:
-    ----
-    mean: dictionary, mean values of the inputs
-    var: dictionary, variance values of the inputs
-    verbose: boolean, indicate whether to show the model summary
-
-    Outputs:
-    --------
-    model: the DeepONet model
-    """
-    # Branch net
-    branch_input = keras.Input(shape=(len(mean['forcing']),), name="forcing")
+    # Branch Net
+    branch_input = tf.keras.Input(shape=(len(mean['forcing']),), name="forcing")
     branch = tf.keras.layers.Normalization(mean=mean['forcing'], variance=var['forcing'])(branch_input)
     for _ in range(3):
         branch = tf.keras.layers.Dense(50, activation="tanh")(branch)
 
-    # Trunk net
-    trunk_input = tf.keras.Input(shape=(len(mean['time']),), name="time")
-    trunk = tf.keras.layers.Normalization(mean=mean['time'], variance=var['time'])(trunk_input)
+    # Trunk Net
+    trunk_input = tf.keras.Input(shape=(2,), name="coords")  # [x, t]
+    trunk = tf.keras.layers.Normalization(mean=mean['coords'], variance=var['coords'])(trunk_input)
     for _ in range(3):
         trunk = tf.keras.layers.Dense(50, activation="tanh")(trunk)
 
-    # Compute the dot product between branch and trunk net
-    dot_product = tf.keras.layers.Lambda(lambda x: tf.reduce_sum(x[0] * x[1], axis=1, keepdims=True),
-                                         output_shape=(1,))([branch, trunk])
+    # Dot Product
+    dot_product = tf.keras.layers.Lambda(
+        lambda x: tf.reduce_sum(x[0] * x[1], axis=1, keepdims=True)
+    )([branch, trunk])
 
-    # Add the bias
+    # Output + Bias
     output = BiasLayer()(dot_product)
 
-    # Create the model
     model = tf.keras.models.Model(inputs=[branch_input, trunk_input], outputs=output)
-
     if verbose:
         model.summary()
-
     return model
 
 class BiasLayer(tf.keras.layers.Layer):
@@ -58,65 +44,42 @@ class BiasLayer(tf.keras.layers.Layer):
     def from_config(cls, config):
         return cls(**config)
     
-def ODE_residual_calculator(t, u, u_t, model):
-    """ODE residual calculation.
+def PDE_residual_calculator(coords, forcing, u_func, model):
+    coords = tf.convert_to_tensor(coords)
+    coords = tf.Variable(coords)  # Enables gradient tracking
 
-    Args:
-    ----
-    t: temporal coordinate
-    u: input function evaluated at discrete temporal coordinates
-    u_t: input function evaluated at t
-    model: DeepONet model
+    with tf.GradientTape(persistent=True) as tape2:
+        with tf.GradientTape() as tape1:
+            tape1.watch(coords)
+            tape2.watch(coords)
+            s_pred = model({"forcing": forcing, "coords": coords})  # (N, 1)
 
-    Outputs:
-    --------
-    ODE_residual: residual of the governing ODE
-    """
+        ds_dxdt = tape1.gradient(s_pred, coords)  # (N, 2) → [∂s/∂x, ∂s/∂t]
 
+    d2s_dx2 = tape2.gradient(ds_dxdt[:, 0:1], coords)[:, 0:1]  # ∂²s/∂x²
+    ds_dt = ds_dxdt[:, 1:2]  # ∂s/∂t
+
+    residual = ds_dt - 0.01 * d2s_dx2 - 0.01 * s_pred - u_func
+    return residual
+
+def train_step(X_col, X_init, IC_weight, PDE_weight, model):
     with tf.GradientTape() as tape:
-        tape.watch(t)
-        s = model({"forcing": u, "time": t})
+        # PDE residual loss
+        coords_col = X_col[:, :2]  # [x, t]
+        forcing_col = X_col[:, 2:-1]
+        u_val_col = X_col[:, -1:]
 
-    ds_dt = tape.gradient(s, t)
-    ODE_residual = ds_dt - u_t
-    return ODE_residual
+        residual = PDE_residual_calculator(coords_col, forcing_col, u_val_col, model)
+        PDE_loss = tf.reduce_mean(tf.square(residual))
 
-def train_step(X, X_init, IC_weight, ODE_weight, model):
-    """Calculate gradients of the total loss with respect to network model parameters.
-
-    Args:
-    ----
-    X: training dataset for evaluating ODE residuals
-    X_init: training dataset for evaluating initial conditions
-    IC_weight: weight for initial condition loss
-    ODE_weight: weight for ODE loss
-    model: DeepONet model
-
-    Outputs:
-    --------
-    ODE_loss: calculated ODE loss
-    IC_loss: calculated initial condition loss
-    total_loss: weighted sum of ODE loss and initial condition loss
-    gradients: gradients of the total loss with respect to network model parameters.
-    """
-    with tf.GradientTape() as tape:
-        tape.watch(model.trainable_weights[-1].value)
-
-        # Initial condition prediction
-        y_pred_IC = model({"forcing": X_init[:, 1:-1], "time": X_init[:, :1]})
-
-        # Equation residual
-        ODE_residual = ODE_residual_calculator(t=X[:, :1], u=X[:, 1:-1], u_t=X[:, -1:], model=model)
-
-        # Calculate loss
-        MSE = keras.losses.MeanSquaredError()
-        IC_loss = tf.reduce_mean(MSE(0, y_pred_IC))
-        ODE_loss = tf.reduce_mean(tf.square(ODE_residual))
+        # Initial condition loss (s(x, 0) ≈ 0)
+        coords_ini = X_init[:, :2]
+        forcing_ini = X_init[:, 2:-1]
+        s_pred_ini = model({"forcing": forcing_ini, "coords": coords_ini})
+        IC_loss = tf.reduce_mean(tf.square(s_pred_ini))
 
         # Total loss
-        total_loss = IC_loss*IC_weight + ODE_loss*ODE_weight
+        total_loss = PDE_weight * PDE_loss + IC_weight * IC_loss
 
     gradients = tape.gradient(total_loss, model.trainable_variables)
-
-    return ODE_loss, IC_loss, total_loss, gradients
-
+    return PDE_loss, IC_loss, total_loss, gradients

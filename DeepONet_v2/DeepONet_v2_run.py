@@ -49,18 +49,18 @@ class LossTracking:
     def __init__(self):
         self.mean_total_loss = keras.metrics.Mean()
         self.mean_IC_loss = keras.metrics.Mean()
-        self.mean_ODE_loss = keras.metrics.Mean()
+        self.mean_PDE_loss = keras.metrics.Mean()
         self.loss_history = defaultdict(list)
 
     def update(self, total_loss, IC_loss, ODE_loss):
         self.mean_total_loss(total_loss)
         self.mean_IC_loss(IC_loss)
-        self.mean_ODE_loss(ODE_loss)
+        self.mean_PDE_loss(ODE_loss)
 
     def reset(self):
         self.mean_total_loss.reset_state()
         self.mean_IC_loss.reset_state()
-        self.mean_ODE_loss.reset_state()
+        self.mean_PDE_loss.reset_state()
 
     def print(self):
         print(f"IC={self.mean_IC_loss.result().numpy():.4e}, ODE={self.mean_ODE_loss.result().numpy():.4e}, total_loss={self.mean_total_loss.result().numpy():.4e}")
@@ -68,12 +68,12 @@ class LossTracking:
     def history(self):
         self.loss_history['total_loss'].append(self.mean_total_loss.result().numpy())
         self.loss_history['IC_loss'].append(self.mean_IC_loss.result().numpy())
-        self.loss_history['ODE_loss'].append(self.mean_ODE_loss.result().numpy())
+        self.loss_history['PDE_loss'].append(self.mean_ODE_loss.result().numpy())
 
 # Set up training configurations
 n_epochs = 300
 IC_weight= tf.constant(1.0, dtype=tf.float32)   
-ODE_weight= tf.constant(1.0, dtype=tf.float32)
+PDE_weight= tf.constant(1.0, dtype=tf.float32)
 loss_tracker = LossTracking()
 val_loss_hist = []
 
@@ -114,17 +114,17 @@ for epoch in range(1, n_epochs + 1):
     ####### Validation
     X_val_tensor = tf.convert_to_tensor(X_val, dtype=tf.float32)
     val_res = model.ODE_residual_calculator(X_val_tensor[:, :1], X_val_tensor[:, 1:-1], X_val_tensor[:, -1:], PI_DeepONet)
-    val_ODE = tf.cast(tf.reduce_mean(tf.square(val_res)), tf.float32)
+    val_PDE = tf.cast(tf.reduce_mean(tf.square(val_res)), tf.float32)
 
     X_val_ini = X_val[X_val[:, 0]==0]
     pred_ini_valid = PI_DeepONet.predict({"forcing": X_val_ini[:, 1:-1], "time": X_val_ini[:, :1]}, batch_size=12800)
     MSE = tf.keras.losses.MeanSquaredError()
     val_IC = tf.reduce_mean(MSE(0, pred_ini_valid))
-    print(f"val_IC: {val_IC.numpy():.4e}, val_ODE: {val_ODE.numpy():.4e}, lr: {PI_DeepONet.optimizer.learning_rate.numpy():.2e}")
+    print(f"val_IC: {val_IC.numpy():.4e}, val_ODE: {val_PDE.numpy():.4e}, lr: {PI_DeepONet.optimizer.learning_rate.numpy():.2e}")
 
     # Callback at the end of epoch
-    callbacks.on_epoch_end(epoch, logs={'val_loss': val_IC+val_ODE})
-    val_loss_hist.append(val_IC+val_ODE)
+    callbacks.on_epoch_end(epoch, logs={'val_loss': val_IC+val_PDE})
+    val_loss_hist.append(val_IC+val_PDE)
 
     # Re-shuffle dataset
     ini_ds = tf.data.Dataset.from_tensor_slices((X_train_ini))

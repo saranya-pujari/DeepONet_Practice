@@ -70,7 +70,7 @@ def create_random_walk_samples(sample_num):
   return u_sample
 
 # Generate the dataset
-def generate_dataset_new(N, type = 'gaussian', PDE_solve=False, length_scale=0.4):
+def generate_dataset(N, type = 'gaussian', PDE_solve=False, length_scale=0.4):
     # Create random fields
     if type == 'gaussian':
       random_field = create_gaussian_samples
