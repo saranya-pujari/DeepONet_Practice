@@ -6,7 +6,7 @@ import numpy as np
 from pde import CartesianGrid, ScalarField, PDE
 
 
-def create_gaussian_samples(length_scale, sample_num):
+def create_gaussian_samples(sample_num, length_scale):
   x = np.linspace(0, 1, 100)
   t = np.linspace(0, 1, 100)
   X, T = np.meshgrid(x, t, indexing='ij')
@@ -73,7 +73,7 @@ def create_random_walk_samples(sample_num):
 def generate_dataset(N, type = 'gaussian', PDE_solve=False, length_scale=0.4):
     # Create random fields
     if type == 'gaussian':
-      random_field = create_gaussian_samples
+      random_field = create_gaussian_samples(N, length_scale)
     elif type == 'linear':
       random_field = create_linear_samples(N)
     elif type == 'sinusoidal':
