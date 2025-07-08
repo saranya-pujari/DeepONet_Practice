@@ -2,10 +2,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
-from tensorflow import keras
 import DeepONet_data as data
 import DeepONet_model as model
-from DeepONet_model import BiasLayer
 
 # Load trained model
 N_train = 2000
@@ -22,7 +20,7 @@ var = {
 }
 
 PI_DeepONet = model.create_model(mean, var)
-PI_DeepONet.load_weights("PI_DeepONet.weights.h5")
+PI_DeepONet.load_weights("/Users/saranyapujari/Documents/GitHub/DeepONet_Practice/DeepONet/PI_DeepONet.weights.h5")
 
 # Random Samples
 def plot_samples(X_test, y_test, N_test, title):

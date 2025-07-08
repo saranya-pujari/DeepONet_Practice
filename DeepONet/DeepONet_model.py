@@ -1,13 +1,3 @@
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF
-from tqdm import tqdm
-from scipy.integrate import solve_ivp
-import numpy as np
-import matplotlib.pyplot as plt
-from collections import defaultdict
-
-import DeepONet_data as data
-
 import tensorflow as tf
 from tensorflow import keras
 tf.random.set_seed(42)

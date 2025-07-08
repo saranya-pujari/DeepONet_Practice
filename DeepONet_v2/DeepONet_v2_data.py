@@ -6,17 +6,23 @@ import numpy as np
 from pde import CartesianGrid, ScalarField, PDE
 
 
+
 def create_gaussian_samples(sample_num, length_scale):
-  x = np.linspace(0, 1, 100)
-  t = np.linspace(0, 1, 100)
+  # Set up gaussian process
+  kernel = RBF(length_scale)
+  gp = GaussianProcessRegressor(kernel=kernel)
+
+  # Create coordinate space
+  x = np.linspace(0, 1, 100, dtype=np.float32)
+  t = np.linspace(0, 1, 100, dtype=np.float32)
   X, T = np.meshgrid(x, t, indexing='ij')
+  coords = np.stack([X, T], axis=-1).reshape(-1, 2).astype(np.float32)
+  u_sample = np.zeros((sample_num, 100 * 100), dtype=np.float32)
 
-  u_sample = np.zeros((sample_num, 100 * 100))
-
-  for i in range(sample_num):
-    gp = GaussianProcessRegressor(kernel=RBF(length_scale=length_scale))
-    coords = np.stack([X.flatten(), T.flatten()], axis=1)
-    u = gp.sample_y(coords, random_state=np.random.randint(0, 10000))
+  # Generate samples
+  for i in tqdm(range(sample_num)):
+    n = np.random.randint(0, 10000)
+    u = gp.sample_y(coords, random_state=n).astype(np.float32)
     u_sample[i, :] = u.flatten()
 
   return u_sample
@@ -29,7 +35,7 @@ def create_linear_samples(sample_num):
 
   u_sample = np.zeros((sample_num, 100 * 100))
 
-  for i in range(sample_num):
+  for i in tqdm(range(sample_num)):
     a = np.random.uniform(-1, 1)
     b = np.random.uniform(-1, 1)
     u = a * X + b * T
@@ -45,7 +51,7 @@ def create_sinusoidal_samples(sample_num):
 
   u_sample = np.zeros((sample_num, 100 * 100))
 
-  for i in range(sample_num):
+  for i in tqdm(range(sample_num)):
     a = np.random.uniform(-1, 1)
     b = np.random.uniform(-1, 1)
     u = np.sin(2*np.pi*a*X) + np.sin(2*np.pi*b*T)
@@ -61,9 +67,9 @@ def create_random_walk_samples(sample_num):
 
   u_sample = np.zeros((sample_num, 100 * 100))
 
-  for i in range(sample_num):
-    walk_x = np.cumsum(np.random.randn(99), axis=0)
-    walk_t = np.cumsum(np.random.randn(99), axis=0)
+  for i in tqdm(range(sample_num)):
+    walk_x = np.cumsum(np.random.randn(100), axis=0)
+    walk_t = np.cumsum(np.random.randn(100), axis=0)
     u = np.outer(walk_x, walk_t)
   u_sample[i,:] = u.flatten()
 
@@ -88,7 +94,7 @@ def generate_dataset(N, type = 'gaussian', PDE_solve=False, length_scale=0.4):
     y = np.zeros((N * 100, 1))
 
     for i in tqdm(range(N)):
-      u = np.tile(random_field[i, :], (100, 1))  # shape (100, 100)
+      u = random_field[i, :].reshape(100, 100)
       t = np.linspace(0, 1, 100).reshape(-1, 1)
       u_t = np.diag(u).reshape(-1, 1)
 

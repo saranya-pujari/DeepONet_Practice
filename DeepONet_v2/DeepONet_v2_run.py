@@ -11,13 +11,13 @@ tf.random.set_seed(42)
 
 # Create training dataset
 N_train = 2000
-length_scale_train = 0.4
-X_train, y_train = data.generate_dataset(N_train, length_scale=length_scale_train)
+#length_scale_train = 0.4
+X_train, y_train = data.generate_dataset(N_train, 'sinusoidal')
 
 # Create validation dataset
 N_val = 100
-length_scale_test = 0.4
-X_val, y_val = data.generate_dataset(N_val, length_scale=length_scale_test)
+#length_scale_test = 0.4
+X_val, y_val = data.generate_dataset(N_val, 'sinusoidal')
 
 # Determine batch size
 ini_batch_size = int(2000/100)
