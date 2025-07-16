@@ -90,15 +90,17 @@ def generate_dataset(N, type = 'gaussian', PDE_solve=False, length_scale=0.4):
       raise ValueError("Unsupported sample_type.")
 
     # Compile dataset
-    X = np.zeros((N * 100, 100 + 2))
+    x = np.linspace(0, 1, 100, dtype=np.float32).reshape(-1, 1)
+    t = np.linspace(0, 1, 100, dtype=np.float32).reshape(-1, 1)
+    X = np.zeros((N * 100, 2 + 100 + 1)) # N * 100 rows, X_grid + T_grid + u(x,t) + u(x=t) columns
     y = np.zeros((N * 100, 1))
+
 
     for i in tqdm(range(N)):
       u = random_field[i, :].reshape(100, 100)
-      t = np.linspace(0, 1, 100).reshape(-1, 1)
       u_t = np.diag(u).reshape(-1, 1)
 
-      X[i * 100:(i + 1) * 100, :] = np.concatenate((t, u, u_t), axis=1)
+      X[i * 100:(i + 1) * 100, :] = np.concatenate((x, t, u, u_t), axis=1)
 
       # Solve PDE instead of ODE
       if PDE_solve:

@@ -10,7 +10,7 @@ def create_model(mean, var, verbose=False):
         branch = tf.keras.layers.Dense(50, activation="tanh")(branch)
 
     # Trunk Net
-    trunk_input = tf.keras.Input(shape=(2,), name="coords")  # [x, t]
+    trunk_input = tf.keras.Input(shape=(len(mean['coords']),), name="coords")
     trunk = tf.keras.layers.Normalization(mean=mean['coords'], variance=var['coords'])(trunk_input)
     for _ in range(3):
         trunk = tf.keras.layers.Dense(50, activation="tanh")(trunk)
@@ -45,22 +45,24 @@ class BiasLayer(tf.keras.layers.Layer):
         return cls(**config)
     
 def PDE_residual_calculator(coords, forcing, u_func, model):
-    coords = tf.convert_to_tensor(coords)
-    coords = tf.Variable(coords)  # Enables gradient tracking
+    coords = tf.convert_to_tensor(coords, dtype=tf.float32)
+    coords = tf.Variable(coords)
 
     with tf.GradientTape(persistent=True) as tape2:
         with tf.GradientTape() as tape1:
             tape1.watch(coords)
             tape2.watch(coords)
-            s_pred = model({"forcing": forcing, "coords": coords})  # (N, 1)
+            s_pred = model({"forcing": forcing, "coords": coords})
 
-        ds_dxdt = tape1.gradient(s_pred, coords)  # (N, 2) → [∂s/∂x, ∂s/∂t]
+        ds_dcoords = tape1.gradient(s_pred, coords) #[∂s/∂x, ∂s/∂t]
+        ds_dx = ds_dcoords[:, 0:1]
+        ds_dt = ds_dcoords[:, 1:2]
 
-    d2s_dx2 = tape2.gradient(ds_dxdt[:, 0:1], coords)[:, 0:1]  # ∂²s/∂x²
-    ds_dt = ds_dxdt[:, 1:2]  # ∂s/∂t
+    d2s_dx2 = tape2.gradient(ds_dx, coords)[:, 0:1]
 
     residual = ds_dt - 0.01 * d2s_dx2 - 0.01 * s_pred - u_func
     return residual
+
 
 def train_step(X_col, X_init, IC_weight, PDE_weight, model):
     with tf.GradientTape() as tape:
