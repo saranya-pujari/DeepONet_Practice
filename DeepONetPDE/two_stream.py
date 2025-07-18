@@ -94,7 +94,7 @@ def main():
     taui    = np.zeros(nzi)
     for i in reversed(range(nzc)):
         taui[i] = taui[i + 1] + dtau[i]
-    np.savetxt("taui.out", taui)
+    np.save("taui.npy", taui)
 
     # Source Function
     dmt_a   = np.zeros(nzi)
@@ -115,7 +115,7 @@ def main():
 
     j_diff = tridag(dmt_a, dmt_b, dmt_c, drs)
     s_diff = eps * bnu + (1 - eps) * j_diff
-    np.savetxt("s_diff.out", s_diff)
+    np.save("s_diff.npy", s_diff)
 
     # (A)LI
     s_iter = eps * bnu.copy()
@@ -179,8 +179,8 @@ def main():
         
         all_iters.append(s_iter.copy())
         
-    np.savetxt("s_iter.txt", np.array(all_iters))
-    np.savetxt("s_final.out", s_iter)
+    np.save("s_iter.npy", np.array(all_iters))
+    np.save("s_final.npy", s_iter)
     
 if __name__ == "__main__":
     main()
