@@ -69,7 +69,7 @@ def plot_samples(X_test, y_test, N_test, title):
 N_test = 100
 length_scale_test = 0.4
 X_test, y_test = data.generate_dataset(N_test, length_scale_test, ODE_solve=True)
-plot_samples(X_test, y_test, N_test, "In-Sample Tests")
+plot_samples(X_test, y_test, N_test, "Gaussian")
 
 # Length Scale 0.2
 X_test_oor, y_test_oor = data.generate_dataset(N_test, 0.2, ODE_solve=True)

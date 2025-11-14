@@ -58,7 +58,7 @@ def tridag(a, b, c, r):
             raise ZeroDivisionError(f"tridag failed at j={j}")
         u[j] = (r[j] - a[j] * u[j - 1]) / beta
 
-    for j in range(n - 2, -1, -1):
+    for j in range(n - 2, 0, -1):
         u[j] -= gamma[j + 1] * u[j + 1]
 
     return u
@@ -84,12 +84,12 @@ def main():
     zc = 0.5 * (zi[:-1] + zi[1:])
     dz      = np.diff(zi)
     alpha   = np.exp(np.log(alpha0) + (np.log(alpha1) - np.log(alpha0)) * zc)
-    bnu     = np.ones(nzi)
     dtau    = alpha * dz / mu
     dtaui   = np.zeros(nzi)
     dtaui[1:-1] = 0.5 * (dtau[1:] + dtau[:-1])
     dtaui[0] = 2 * dtaui[1] - dtaui[2]
     dtaui[-1] = 2 * dtaui[-2] - dtaui[-3]
+    bnu     = np.ones(nzi)
 
     taui    = np.zeros(nzi)
     for i in reversed(range(nzc)):
@@ -148,6 +148,27 @@ def main():
             lambda_b[i] += 0.5 * v
             lambda_c[i] += 0.5 * w
         
+    intensity = 0.0
+    j_iter[-1] += 0.5 * intensity
+
+    for i in reversed(range(nzi - 1)):
+        sp = s_iter[i + 1]
+        sc = s_iter[i]
+        dtp = dtau[i]
+        if i != 0:
+            sn = s_iter[i - 1]
+            dtn = dtau[i - 1]
+        else:
+            sn = sc
+            dtn = dtaui[0]
+
+        intensity, u, v, w = qdr_olsonkunasz(intensity, sp, sc, sn, dtp, dtn, order)
+        j_iter[i] += 0.5 * intensity
+        lambda_a[i] += 0.5 * w
+        lambda_b[i] += 0.5 * v
+        lambda_c[i] += 0.5 * u
+
+
         mat_a = -(1 - eps) * lambda_a
         mat_b = 1 - (1 - eps) * lambda_b
         mat_c = -(1 - eps) * lambda_c
